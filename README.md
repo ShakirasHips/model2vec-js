@@ -198,9 +198,8 @@ and 24) and the install check (all four).
 
 To release, bump the version and push the tag: `npm version patch && git push --follow-tags`. The release workflow
 checks that the tag matches `package.json`, tests again, publishes to npm with provenance and creates a GitHub
-release. It publishes with npm's trusted publishing, which needs setting up once on npmjs.com (the package's
-Settings → Trusted publishing: GitHub Actions, repository `ShakirasHips/model2vec-js`, workflow `release.yml`,
-environment `npm`). Until then, an `NPM_TOKEN` secret on the `npm` environment works instead.
+release. It publishes with npm's trusted publishing (the package's Settings → Trusted publishing: GitHub Actions,
+repository `ShakirasHips/model2vec-js`, workflow `release.yml`, environment `npm`), so no token is stored anywhere.
 
 ## Credits and licence
 

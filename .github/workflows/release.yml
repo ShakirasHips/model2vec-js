@@ -31,10 +31,8 @@ jobs:
       # Trusted publishing needs npm 11.5.1+.
       - run: npm install -g npm@latest
       - name: Publish to npm
+        # npm's trusted publishing: no token, npm checks the run's OIDC identity against the package settings.
         run: npm publish --provenance --access public
-        env:
-          # Only needed until trusted publishing is set up on npmjs.com; without a token npm uses OIDC.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: GitHub release
         run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
         env:
