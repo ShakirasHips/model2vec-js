@@ -1,0 +1,63 @@
+{
+  "name": "model2vec-js",
+  "version": "0.1.0",
+  "description": "Model2Vec static embeddings in JavaScript, with FAQ search and spelling correction. Runs in browsers and Node; no dependencies; 4.6 MB with the model.",
+  "keywords": [
+    "model2vec",
+    "embeddings",
+    "static-embeddings",
+    "semantic-search",
+    "faq",
+    "sentence-embeddings",
+    "browser",
+    "spelling-correction"
+  ],
+  "license": "MIT",
+  "author": "ShakirasHips",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ShakirasHips/model2vec-js.git"
+  },
+  "homepage": "https://github.com/ShakirasHips/model2vec-js#readme",
+  "bugs": "https://github.com/ShakirasHips/model2vec-js/issues",
+  "type": "module",
+  "exports": {
+    ".": {
+      "node": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.js"
+      },
+      "default": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./models/*": "./models/*"
+  },
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "model2vec-js": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "models",
+    "!dist/**/*.test.*"
+  ],
+  "sideEffects": [
+    "./dist/node.js",
+    "./dist/cli.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsc && node --test \"test/*.test.mjs\"",
+    "prepublishOnly": "npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.0"
+  }
+}
