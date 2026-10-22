@@ -1,0 +1,41 @@
+name: Release
+
+# Push a tag matching package.json's version (`npm version patch && git push --follow-tags`) to test and publish it
+# to npm with provenance, and to create a GitHub release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # the GitHub release
+  id-token: write # npm trusted publishing and provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - name: Tag matches package.json
+        run: |
+          version=$(node -p "require('./package.json').version")
+          [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "tag $GITHUB_REF_NAME but package.json has $version" >&2; exit 1; }
+      - run: npm ci
+      - run: npm test
+      - run: sh scripts/smoke.sh
+      # Trusted publishing needs npm 11.5.1+.
+      - run: npm install -g npm@latest
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          # Only needed until trusted publishing is set up on npmjs.com; without a token npm uses OIDC.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

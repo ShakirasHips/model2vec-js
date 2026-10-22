@@ -188,9 +188,19 @@ How the bundled model was chosen, on the help centre:
 ```sh
 npm install
 npm test                       # builds, then runs the tests (Node 21+)
+sh scripts/smoke.sh            # packs the package, installs it in an empty project and uses it from there
 sh scripts/build-words.sh      # rebuilds models/words.txt from SCOWL
 python scripts/make-fixture.py <potion-base-8M folder>   # rebuilds the reference fixture (needs model2vec)
 ```
+
+CI (`.github/workflows/ci.yml`) builds every push and pull request on Node 18, 20, 22 and 24, runs the tests (22
+and 24) and the install check (all four).
+
+To release, bump the version and push the tag: `npm version patch && git push --follow-tags`. The release workflow
+checks that the tag matches `package.json`, tests again, publishes to npm with provenance and creates a GitHub
+release. It publishes with npm's trusted publishing, which needs setting up once on npmjs.com (the package's
+Settings → Trusted publishing: GitHub Actions, repository `ShakirasHips/model2vec-js`, workflow `release.yml`,
+environment `npm`). Until then, an `NPM_TOKEN` secret on the `npm` environment works instead.
 
 ## Credits and licence
 
