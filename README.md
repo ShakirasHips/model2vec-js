@@ -1,118 +1,116 @@
-# model2vec-js
+# mini-semantic-search
 
-[Model2Vec](https://github.com/MinishLab/model2vec) static embeddings in JavaScript, with FAQ search and spelling
-correction built on them. It runs in browsers and Node with no dependencies, and comes with a model:
-potion-base-8M packed to 4.2 MB.
-
-A static embedding model keeps one vector per token, and a text's vector is the average of its tokens' vectors.
-There is no neural network to run, so embedding a sentence takes about 10 µs on a CPU, and the whole thing fits
-in a web page. Matching is by meaning: "stop sending me newsletters" finds "How do I unsubscribe from your
-emails?", and "the mug came smashed" finds "My item arrived damaged or broken".
+Semantic search with [MiniSearch](https://github.com/lucaong/minisearch)'s API. Documents are matched by meaning
+rather than shared words: "stop sending me newsletters" finds "How do I unsubscribe from your emails?", and "the mug
+came smashed" finds "My item arrived damaged or broken". It runs in browsers and Node with no dependencies, no
+server and no API calls, and the package is 2.2 MB with its model (1.8 MB gzipped).
 
 ```ts
-import { FaqSearch } from 'model2vec-js';
+import MiniSemanticSearch from 'mini-semantic-search';
 
-const faq = await FaqSearch.create([
-  { id: 'returns', q: 'How do I return an item?', a: 'Start a return under Orders in your account…' },
-  { id: 'damaged', q: 'My item arrived damaged or broken.', a: 'Send us a photo of the damage…' },
-  // …
+const search = await MiniSemanticSearch.create({
+  fields: ['title', 'text'],       // fields to embed and search
+  storeFields: ['title'],          // fields to return with results
+});
+
+search.addAll([
+  { id: 1, title: 'Returns', text: 'Start a return under Orders in your account.' },
+  { id: 2, title: 'Damaged items', text: 'Send us a photo of the damage and we will replace it.' },
+  { id: 3, title: 'Shipping times', text: 'Standard shipping takes 3 to 5 business days.' },
 ]);
 
-const r = faq.ask('the mug came smahsed');
-r.corrected;          // "the mug came smashed"
-r.answer?.entry.id;   // "damaged" (null when nothing is close enough)
-r.matches;            // the best 3, with scores, whether or not they count as an answer
+search.search('the mug came smashed');
+// => [
+//   { id: 2, score: 0.39, title: 'Damaged items' },
+//   { id: 3, score: 0.15, title: 'Shipping times' },
+//   { id: 1, score: 0.08, title: 'Returns' },
+// ]
 ```
+
+The embeddings come from [Model2Vec](https://github.com/MinishLab/model2vec), a static embedding model. It keeps one
+vector per token, and a text's vector is the average of its tokens' vectors. There is no neural network to run, so
+embedding a document takes about 0.1 ms on a CPU.
 
 ## Install
 
 ```sh
-npm install model2vec-js
+npm install mini-semantic-search
 ```
 
-- **Node 18+:** `import { FaqSearch } from 'model2vec-js'`. The bundled model and word list load from the package.
+- **Node 18+:** `import MiniSemanticSearch from 'mini-semantic-search'`. The bundled model loads from the package.
 - **Bundlers (Vite, webpack 5, esbuild, Rollup):** the same import. The model is found with
   `new URL('../models/…', import.meta.url)`, which bundlers copy as an asset. Or pass `model:` your own URL.
 - **Straight from a CDN, no build step:**
 
   ```html
   <script type="module">
-    import { FaqSearch } from 'https://cdn.jsdelivr.net/npm/model2vec-js@0.1.0/dist/index.js';
-    const faq = await FaqSearch.create(await (await fetch('/faq.json')).json());
+    import MiniSemanticSearch from 'https://cdn.jsdelivr.net/npm/mini-semantic-search@0.1.0/dist/index.js';
+    const search = await MiniSemanticSearch.create({ fields: ['title', 'text'] });
   </script>
   ```
 
-  The model and word list then load from the CDN too (4.6 MB; 3.7 MB gzipped).
+  The model (2.2 MB) then loads from the CDN too.
 
-Your FAQ never leaves the page: everything runs locally, with no server and no API calls.
+## API
 
-## FAQ search
+It follows MiniSearch, so code written for one mostly works with the other. The one difference in setting it up is
+that the model has to load first, so you either `await MiniSemanticSearch.create(options)` or pass a loaded model
+to the constructor:
 
 ```ts
-const faq = await FaqSearch.create(entries, options?);
-const result = faq.ask(question, { k: 3, filter: (entry) => entry.audience !== 'admin' });
+import MiniSemanticSearch, { StaticModel } from 'mini-semantic-search';
+
+const model = await StaticModel.load();  // load once, share between indexes
+const search = new MiniSemanticSearch({ model, fields: ['title', 'text'] });
 ```
-
-An entry needs `q` (the question) and `a` (the answer); any other fields are kept, so `result.answer.entry` is your
-own object.
-
-| Field | |
-|---|---|
-| `q`, `a` | The question and answer. The answer is returned as it is, in whatever format you display. |
-| `section` | A heading, matched along with the question. It helps when questions are alike ("What does this screen show?"). |
-| `alt` | Other ways people ask the question, e.g. `["do you take amex"]`. The closest phrasing counts. This is the way to fix a question that finds the wrong entry. |
 
 | Option | Default | |
 |---|---|---|
-| `model` | bundled potion-base-8M | A `StaticModel`, or a URL, path or bytes of a packed model. |
-| `words` | bundled list | The spelling corrector's extra known words (a URL, path, bytes or array); `false` turns correction off. |
-| `mix` | `0.5` | How much the answer text counts against the question alone. |
-| `threshold` | `'auto'` | The score the best match needs to count as an answer, or `'auto'` to set it from your FAQ (below). |
+| `fields` | required | The fields embedded and searched. A field holding an array is embedded item by item, and its closest item counts. |
+| `storeFields` | `[]` | The fields returned with each result. |
+| `idField` | `'id'` | The field holding each document's unique id. |
+| `extractField` | `doc[field]` | `(document, fieldName) => value`, for nested or computed fields. |
+| `searchOptions` | `{}` | Defaults for `search`. |
+| `model` | bundled potion-base-8M | A `StaticModel`, or (in `create`) a URL, path or bytes of a packed model. |
 
-`ask` returns `{ question, corrected, answer, matches }`:
-- `corrected` is the question as searched, or `null` if nothing was corrected. Show it ("Showing results for…").
-- `answer` is the best match if it scored at least `faq.threshold`, else `null`.
-- `matches` are the best `k`, best first, whatever their scores. Show them as "related" or, when there is no
-  answer, as "closest topics".
+| Method | |
+|---|---|
+| `add(doc)`, `addAll(docs)` | Index documents. They can be searched straight away. A duplicate id throws. |
+| `addAllAsync(docs, { chunkSize: 100 })` | The same, yielding between chunks so a page stays responsive. |
+| `remove(doc)`, `discard(id)`, `discardAll(ids)` | Remove documents, by document or by id. |
+| `removeAll(docs?)` | Remove the given documents, or all of them. |
+| `replace(doc)` | Replace the document with the same id. |
+| `has(id)`, `getStoredFields(id)`, `documentCount` | What's indexed. |
+| `search(query, options?)` | Every document, best first, as `{ id, score, ...storeFields }`. |
 
-`faq.add(...entries)` and `faq.remove(predicate)` change the FAQ in place. Indexing takes about 0.2 ms an entry
-and `ask` under a millisecond (a few ms when correcting typos), so indexing on every page load is fine.
+Search options:
 
-**How entries are scored.** Each entry is embedded twice: its section and question (and each `alt`), and the same
-with the answer. Its score is half its closest question's cosine similarity to the question asked, plus half the
-whole entry's. Questions alone miss answers that use the asker's words; answers alone drown the question.
+| Option | |
+|---|---|
+| `fields` | Search only these fields, e.g. `{ fields: ['title'] }`. |
+| `boost` | Weights of fields against each other, e.g. `{ boost: { title: 3 } }`. |
+| `filter` | `(result) => boolean`; the result includes its stored fields. |
+| `minScore` | Leave out results scoring under this. |
 
-**The threshold.** How high an unrelated question scores depends on the FAQ's wording, so by default the threshold
-is set per FAQ. Forty built-in questions no FAQ should answer ("how do I bake sourdough bread", "who painted the
-Mona Lisa") are scored against it, and the threshold is put 0.02 above the 90th percentile. On the two FAQs
-measured below, every off-topic test question was turned away. Answerable ones turned away dropped from 17.8% to
-14.8% on one FAQ and from 2.4% to 0.6% on the other, against a fixed 0.4.
+**How documents are scored.** Each document is embedded once per field and once with all its fields together. Its
+score is half the whole document's cosine similarity to the query, plus half its fields' similarities averaged
+(weighted by `boost`). Scores run from about −0.1 to 1. A document always scores something, so every document comes
+back: `slice` the results, or set `minScore` to drop the ones too far off to count as a match. Where to set it
+depends on your documents' wording. Try your own off-topic questions and put it just above the scores they get.
 
-## Spelling correction
+**How it differs from MiniSearch.** Results have no `terms`, `queryTerms` or `match`, because nothing is matched
+word for word. There's no `prefix`, `fuzzy`, `combineWith`, `autoSuggest` or query syntax, and no
+`toJSON`/`loadJSON`: indexing costs about 0.1 ms per document, so you can just index again on load.
 
-A misspelt word breaks into word pieces that mean something else ("reprots" becomes `rep ##rot ##s`), so one typo
-can send a short question to the wrong answer. Before embedding, `ask` replaces each unknown word with the closest
-known one.
-
-- **Known words:** your FAQ's words, the model's whole-word tokens, and 69,403 more from SCOWL, a curated
-  spell-checker list, so real words like "reassign" or "debtors" are left alone.
-- **Corrections:** one edit (a letter dropped, added, changed or swapped) for words of 4–5 letters, two for longer
-  ones. Two-edit corrections only go to words in your FAQ. Ties go to the same first letter, then to words your
-  FAQ uses most, then to the commoner word.
-- **Left alone:** words under 4 letters, numbers, and anything already known.
-
-It doesn't catch typos that make another real word ("form" for "from").
-
-The `Speller` class is exported for use on its own:
-`new Speller(model, { preferred: texts, known: words }).correct(text)`.
+Indexing takes 0.05–0.2 ms per document. A search over 10,000 documents takes about 8 ms.
 
 ## Embeddings
 
 ```ts
-import { StaticModel, similarity } from 'model2vec-js';
+import { StaticModel, similarity } from 'mini-semantic-search';
 
 const model = await StaticModel.load();            // or StaticModel.load(urlOrPathOrBytes)
-const a = model.embed('how do I cancel my order');  // Float32Array(256), unit length
+const a = model.embed('how do I cancel my order');  // Float32Array(128), unit length
 const b = model.embed('stop my purchase before it ships');
 similarity(a, b);                                   // cosine similarity, 1 = same meaning
 model.embedMany(['refund', 'exchange']);           // several at once
@@ -120,67 +118,48 @@ model.tokenize('Café');                             // token ids
 ```
 
 This matches the Python library. Token ids are identical to Hugging Face's tokenizer, and with a full-precision
-model the vectors match `model2vec` to within 1e-6. The bundled 4-bit model's vectors are within cosine 0.988 of
-full precision. The tests check the token ids and the bundled model's vectors against fixtures made with
-`scripts/make-fixture.py`.
+model the vectors match `model2vec` to within 1e-6. The tests check the token ids and the bundled model's vectors
+against fixtures made with `scripts/make-fixture.py`.
 
 Any Model2Vec model with a lower-casing BERT tokenizer and no token weights can be packed (most `minishlab/potion-*`
-models):
+models). A bigger model is more accurate. The full 256 dimensions of potion-base-8M at 4 bits are 4.2 MB:
 
 ```sh
-npx model2vec-js pack ./potion-base-4M ./potion-base-4M.bin --bits 8
+npx mini-semantic-search pack ./potion-base-8M ./potion-base-8M.bin --bits 4
+```
+
+```ts
+const search = await MiniSemanticSearch.create({ fields: ['title', 'text'], model: '/potion-base-8M.bin' });
 ```
 
 ## Command line
 
 ```sh
-npx model2vec-js ask faq.json "how do I get a refund"
-npx model2vec-js eval faq.json tests.json --typos 0,1,2    # accuracy, with and without the corrector
-npx model2vec-js embed "some text"                         # the vector as JSON
-npx model2vec-js pack <model folder> out.bin [--bits 4|8|32] [--group 64] [--dims N]
-npx model2vec-js words out.txt <word list>...              # a word list for the corrector
+npx mini-semantic-search search docs.json "how do I get a refund" --fields title,text [--k 5]
+npx mini-semantic-search embed "some text"                  # the vector as JSON
+npx mini-semantic-search pack <model folder> out.bin [--bits 4|8|32] [--group 64] [--dims N]
 ```
-
-`eval` takes test questions as `[{ "q": "...", "ids": ["entry id that answers it"] }]`, with `"ids": []` for
-questions the FAQ shouldn't answer. Entries need an `id`.
 
 ## How well it works
 
-On the example FAQ in `examples/` (a made-up shop, 45 entries, 135 casual test questions and 10 off-topic ones):
+On the example FAQ in `examples/` (a made-up shop, 45 entries searched on `section`, `q` and `a`, and 135 casual
+test questions), with the right entry ranked first or in the top 3:
 
-| Questions | Spelling correction | Right answer first | In top 3 |
-|---|---|---|---|
-| as written | either | 63.0% | 87.4% |
-| 1 typo each | off / **on** | 48.1% / **62.2%** | 71.1% / **86.7%** |
-| 2 typos each | off / **on** | 28.1% / **61.5%** | 49.6% / **83.0%** |
+| Model | Size | `boost` | First | Top 3 |
+|---|---|---|---|---|
+| potion-base-8M, 256 dims at 4 bits | 4.2 MB | `{ q: 3 }` | 63.0% | 87.4% |
+| **potion-base-8M, 128 dims at 4 bits (bundled)** | **2.2 MB** | none | **59.3%** | **80.0%** |
+| **potion-base-8M, 128 dims at 4 bits (bundled)** | **2.2 MB** | `{ q: 3 }` | **60.7%** | **83.7%** |
 
-On a real product's help centre (298 entries, 167 test questions, not included):
-
-| Questions | Spelling correction | Right answer first | In top 3 |
-|---|---|---|---|
-| as written | either | 81.4% | 92.2% |
-| 2 typos each | off / **on** | 46.7% / **79.0%** | 64.7% / **89.8%** |
-
-Typos are generated the same way each run (`misspell`): letters dropped, doubled, swapped, or replaced by or added
-beside a neighbouring key. The test questions were written for these FAQs with the entries in view, so expect real
-questions to do somewhat worse. The model packing, the scoring mix and the threshold rule were chosen on these same
-two sets.
-
-How the bundled model was chosen, on the help centre:
-
-| Model | Size | First | Top 3 |
-|---|---|---|---|
-| potion-base-2M | 7.8 MB | 69.5% | 85.0% |
-| potion-base-4M | 15.3 MB | 75.4% | 91.0% |
-| potion-retrieval-32M | 129.7 MB | 76.0% | 89.2% |
-| potion-base-8M | 30.5 MB | 82.0% | 92.8% |
-| potion-base-8M, 128 dims at 8 bits | 4.1 MB | 75.4% | 90.4% |
-| **potion-base-8M at 4 bits (bundled)** | **4.2 MB** | **81.4%** | **92.2%** |
+The test questions were written with the entries in view, so expect real questions to do somewhat worse. The set
+is small: one question is 0.7%. The bundled model keeps potion-base-8M's first 128 dimensions (its PCA components
+with the most variance), and its vectors are within cosine 0.98 of the full-precision ones cut to 128.
 
 **What it can't do:**
-- It doesn't write answers: it finds yours.
 - Averaging tokens loses word order, so "can I add a shopper" and "can a shopper add me" look alike.
-- It only knows words its training text had. Brand names and jargon ("amex") need `alt` phrasings.
+- It only knows words its training text had. Brand names and jargon ("amex") need other phrasings, such as an
+  array field of the ways people ask.
+- Misspelt words break into word pieces that mean something else, so typos hurt.
 - English only.
 
 ## Development
@@ -189,9 +168,11 @@ How the bundled model was chosen, on the help centre:
 npm install
 npm test                       # builds, then runs the tests (Node 21+)
 sh scripts/smoke.sh            # packs the package, installs it in an empty project and uses it from there
-sh scripts/build-words.sh      # rebuilds models/words.txt from SCOWL
 python scripts/make-fixture.py <potion-base-8M folder>   # rebuilds the reference fixture (needs model2vec)
 ```
+
+The bundled model is rebuilt with
+`node dist/cli.js pack <potion-base-8M folder> models/potion-base-8M-128d.bin --bits 4 --dims 128 --group 128`.
 
 CI (`.github/workflows/ci.yml`) builds every push and pull request on Node 18, 20, 22 and 24, runs the tests (22
 and 24) and the install check (all four).
@@ -203,12 +184,9 @@ repository `ShakirasHips/model2vec-js`, workflow `release.yml`, environment `npm
 
 ## Credits and licence
 
-The code is MIT-licensed (`LICENSE`). The bundled data keeps its own terms, described in `models/README.md`:
+The code is MIT-licensed (`LICENSE`). The bundled model is
+[potion-base-8M](https://huggingface.co/minishlab/potion-base-8M) by MinishLab, MIT, repacked at 128 dimensions and
+4 bits (see `models/README.md`). The API follows [MiniSearch](https://github.com/lucaong/minisearch) by Luca Ongaro.
 
-- **potion-base-8M** by [MinishLab](https://huggingface.co/minishlab/potion-base-8M), MIT, repacked at 4 bits.
-- **The word list** is derived from [SCOWL](http://wordlist.aspell.net/), Copyright 2000-2018 by Kevin Atkinson, and
-  the lists it builds on (including the UK Advanced Cryptics Dictionary, Copyright (c) J Ross Beresford 1993-1999,
-  and Ispell's lists, Copyright 1993 Geoff Kuenning). Filtered and re-encoded. Its notices are in full in
-  `models/SCOWL-COPYRIGHT.txt`.
-
-This package reimplements Model2Vec's inference and BERT's tokenizer in TypeScript; it contains no code from either.
+This package reimplements Model2Vec's inference and BERT's tokenizer in TypeScript; it contains no code from
+Model2Vec, BERT or MiniSearch.

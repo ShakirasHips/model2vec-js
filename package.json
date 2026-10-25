@@ -1,16 +1,17 @@
 {
-  "name": "model2vec-js",
+  "name": "mini-semantic-search",
   "version": "0.1.0",
-  "description": "Model2Vec static embeddings in JavaScript, with FAQ search and spelling correction. Runs in browsers and Node; no dependencies; 4.6 MB with the model.",
+  "description": "Semantic search with a MiniSearch-style API, using Model2Vec static embeddings. Runs in browsers and Node; no dependencies; 2.2 MB with the model.",
   "keywords": [
+    "semantic-search",
+    "search",
+    "minisearch",
     "model2vec",
     "embeddings",
     "static-embeddings",
-    "semantic-search",
-    "faq",
     "sentence-embeddings",
     "browser",
-    "spelling-correction"
+    "offline"
   ],
   "license": "MIT",
   "author": "ShakirasHips",
@@ -36,11 +37,10 @@
   },
   "types": "./dist/index.d.ts",
   "bin": {
-    "model2vec-js": "./dist/cli.js"
+    "mini-semantic-search": "./dist/cli.js"
   },
   "files": [
     "dist",
-    "src",
     "models",
     "!dist/**/*.test.*"
   ],

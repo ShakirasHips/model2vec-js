@@ -10,12 +10,20 @@ test('tokenizes exactly as Hugging Face does', () => {
   ref.sentences.forEach((s, i) => assert.deepEqual(model.tokenize(s), ref.ids[i], JSON.stringify(s)));
 });
 
-test('embeds like the Python library (4-bit, so cosine >= 0.985)', () => {
+// The fixture has all 256 dimensions at full precision. The bundled model keeps the first 128, and a mean cut to
+// 128 dimensions is the mean of the cut vectors, so the reference's first 128 (normalised) is what it should give.
+const cut = (row) => {
+  const v = Float32Array.from(row.slice(0, model.dims));
+  const n = Math.hypot(...v) || 1;
+  return v.map((x) => x / n);
+};
+
+test('embeds like the Python library (4-bit with one scale a row, so cosine >= 0.98)', () => {
   ref.sentences.forEach((s, i) => {
-    const r = Float32Array.from(ref.embeddings[i]);
+    const r = cut(ref.embeddings[i]);
     const v = model.embed(s);
     if (r.every((x) => x === 0)) assert.ok(v.every((x) => x === 0), `${JSON.stringify(s)} should embed to zeros`);
-    else assert.ok(similarity(v, r) >= 0.985, `${JSON.stringify(s).slice(0, 60)}: ${similarity(v, r)}`);
+    else assert.ok(similarity(v, r) >= 0.98, `${JSON.stringify(s).slice(0, 60)}: ${similarity(v, r)}`);
   });
 });
 
@@ -44,7 +52,7 @@ test('model files round-trip at 32, 8 and 4 bits', () => {
 });
 
 test('loads from bytes, a path and a file URL', async () => {
-  const path = new URL('../models/potion-base-8M.bin', import.meta.url);
+  const path = new URL('../models/potion-base-8M-128d.bin', import.meta.url);
   const fromBytes = StaticModel.fromBytes(readFileSync(path));
   const fromPath = await StaticModel.load(path.pathname);
   const fromUrl = await StaticModel.load(path);
@@ -53,7 +61,7 @@ test('loads from bytes, a path and a file URL', async () => {
 });
 
 test('the browser build does not import Node modules', () => {
-  for (const f of ['index', 'model', 'faq', 'speller', 'tokenizer', 'format', 'load', 'evaluate', 'off-topic']) {
+  for (const f of ['index', 'model', 'search', 'tokenizer', 'format', 'load']) {
     const src = readFileSync(new URL(`../dist/${f}.js`, import.meta.url), 'utf8');
     assert.doesNotMatch(src, /from ['"]node:|import\(['"]node:/, f);
     for (const [, dep] of src.matchAll(/from '\.\/([\w-]+)\.js'/g)) assert.notEqual(dep, 'node', `${f} imports node.js`);

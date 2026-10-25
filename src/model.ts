@@ -28,7 +28,7 @@ export class StaticModel {
     this.medianTokenLength = Math.trunc(lengths.length % 2 ? lengths[mid] : (lengths[mid - 1] + lengths[mid]) / 2);
   }
 
-  /** Loads a packed model file; by default the bundled potion-base-8M (4-bit, 4.2 MB). */
+  /** Loads a packed model file; by default the bundled potion-base-8M (128 dimensions at 4 bits, 2.2 MB). */
   static async load(src: Source = DEFAULT_MODEL): Promise<StaticModel> {
     return StaticModel.fromBytes(await loadBytes(src));
   }

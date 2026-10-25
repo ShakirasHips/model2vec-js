@@ -12,10 +12,8 @@ export function setFileReader(reader: FileReader): void {
   readFile = reader;
 }
 
-/** The bundled model: potion-base-8M packed at 4 bits. */
-export const DEFAULT_MODEL = new URL('../models/potion-base-8M.bin', import.meta.url);
-/** The bundled word list for the spelling corrector (SCOWL size 60, front-coded). */
-export const DEFAULT_WORDS = new URL('../models/words.txt', import.meta.url);
+/** The bundled model: potion-base-8M's first 128 dimensions, packed at 4 bits. */
+export const DEFAULT_MODEL = new URL('../models/potion-base-8M-128d.bin', import.meta.url);
 
 export async function loadBytes(src: Source): Promise<Uint8Array> {
   if (src instanceof ArrayBuffer) return new Uint8Array(src);
@@ -27,8 +25,4 @@ export async function loadBytes(src: Source): Promise<Uint8Array> {
   const res = await fetch(src as string | URL);
   if (!res.ok) throw new Error(`${String(src)}: HTTP ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
-}
-
-export async function loadText(src: Source): Promise<string> {
-  return new TextDecoder().decode(await loadBytes(src));
 }
