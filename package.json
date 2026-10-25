@@ -37,7 +37,7 @@
   },
   "types": "./dist/index.d.ts",
   "bin": {
-    "mini-semantic-search": "./dist/cli.js"
+    "mini-semantic-search": "dist/cli.js"
   },
   "files": [
     "dist",
