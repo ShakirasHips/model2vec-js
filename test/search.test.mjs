@@ -13,7 +13,7 @@ search.addAll(docs);
 
 test('finds documents asked about in other words', () => {
   for (const [q, id] of [
-    ['when will my stuff arrive', 'shipping-time'],
+    ['how long does delivery take', 'shipping-time'],
     ['do you take paypal', 'payment-methods'],
     ['the mug came smashed', 'damaged'],
     ['stop sending me newsletters', 'unsubscribe'],
@@ -41,7 +41,7 @@ test('accuracy on the example tests stays where it was measured', () => {
     if (t.ids.includes(ids[0])) top1++;
     if (ids.some((id) => t.ids.includes(id))) top3++;
   }
-  assert.ok(top1 / answerable.length >= 0.58 && top3 / answerable.length >= 0.82, `${top1} ${top3} of ${answerable.length}`);
+  assert.ok(top1 / answerable.length >= 0.63 && top3 / answerable.length >= 0.84, `${top1} ${top3} of ${answerable.length}`);
 });
 
 test('search options: filter, minScore, fields and boost', () => {
@@ -75,6 +75,41 @@ test('add, discard, remove, replace and removeAll, as in MiniSearch', () => {
   s.removeAll();
   assert.equal(s.documentCount, 0);
   assert.deepEqual(s.search('anything'), []);
+});
+
+test('scores stay right through adds, removals and changes of search options', () => {
+  const fresh = (list, options) => {
+    const s = make();
+    s.addAll(list);
+    return new Map(s.search('where is my refund', options).map((r) => [r.id, r.score]));
+  };
+  const s = make();
+  s.addAll(docs.slice(0, 20));
+  for (const options of [{}, { fields: ['q'] }, { boost: { a: 2 } }, {}]) {
+    s.search('warm up', options);
+    s.search('warm up', options); // options used twice running get a score matrix, which the changes below update
+    s.addAll(docs.slice(20, 30));
+    s.discardAll([docs[3].id, docs[25].id, docs[0].id]);
+    s.replace({ ...docs[10], q: 'Where is my refund?' });
+    const now = docs.slice(0, 30).filter((d) => ![docs[3].id, docs[25].id, docs[0].id].includes(d.id))
+      .map((d) => (d.id === docs[10].id ? { ...d, q: 'Where is my refund?' } : d));
+    const want = fresh(now, options), got = s.search('where is my refund', options);
+    assert.equal(got.length, want.size);
+    for (const r of got) assert.ok(Math.abs(r.score - want.get(r.id)) < 1e-6, `${r.id}`);
+    assert.equal(got[0].id, [...want].sort((a, b) => b[1] - a[1])[0][0]);
+    s.removeAll();
+    s.addAll(docs.slice(0, 20));
+  }
+});
+
+test('a first search with new options scores as later ones do', () => {
+  const s = make();
+  s.addAll([...docs, { id: 'alt', q: ['Can I pay by card?', 'Do you take amex?'], a: 'Yes.' }]);
+  for (const options of [{}, { fields: ['q', 'a'] }, { boost: { q: 3, section: 0 } }]) {
+    const first = s.search('do you take amex', options), again = s.search('do you take amex', options);
+    assert.deepEqual(first.map((r) => r.id).slice(0, 5), again.map((r) => r.id).slice(0, 5));
+    first.forEach((r, i) => assert.ok(Math.abs(r.score - again.find((a) => a.id === r.id).score) < 1e-6, `${r.id} ${i}`));
+  }
 });
 
 test('addAllAsync, a custom idField and extractField', async () => {

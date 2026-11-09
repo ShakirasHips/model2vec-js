@@ -3,8 +3,8 @@
 
 const isPunct = (c: string): boolean => {
   const cp = c.codePointAt(0)!;
-  return (cp >= 33 && cp <= 47) || (cp >= 58 && cp <= 64) || (cp >= 91 && cp <= 96) || (cp >= 123 && cp <= 126)
-    || /\p{P}/u.test(c);
+  if (cp < 128) return (cp >= 33 && cp <= 47) || (cp >= 58 && cp <= 64) || (cp >= 91 && cp <= 96) || (cp >= 123 && cp <= 126);
+  return /\p{P}/u.test(c);
 };
 
 const isCjk = (cp: number): boolean => (cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0x3400 && cp <= 0x4dbf)
@@ -13,6 +13,8 @@ const isCjk = (cp: number): boolean => (cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 
 
 /** Drops control characters, spaces out CJK characters, strips accents and lower-cases. */
 export function normalize(text: string): string {
+  // Printable ASCII, tabs and newlines: nothing to drop, space out or strip.
+  if (/^[\t\n\r\x20-\x7e]*$/.test(text)) return text.replace(/[\t\n\r]/g, ' ').toLowerCase();
   let out = '';
   for (const c of text) {
     const cp = c.codePointAt(0)!;
@@ -41,8 +43,11 @@ export function preTokenize(text: string): string[] {
   return words;
 }
 
-/** Token ids for text: each word as the longest known pieces, left to right, or `unk` if it can't be spelt. */
-export function wordPiece(vocab: Map<string, number>, unk: number, text: string): number[] {
+/**
+ * Token ids for text: each word as the longest known pieces, left to right, or `unk` if it can't be spelt.
+ * `longest` (the vocabulary's longest token, in characters) only saves looking up pieces too long to be known.
+ */
+export function wordPiece(vocab: Map<string, number>, unk: number, text: string, longest = Infinity): number[] {
   const ids: number[] = [];
   for (const w of preTokenize(normalize(text))) {
     const chars = Array.from(w);
@@ -50,12 +55,13 @@ export function wordPiece(vocab: Map<string, number>, unk: number, text: string)
       ids.push(unk);
       continue;
     }
+    const piece = chars.length === w.length ? (s: number, e: number) => w.slice(s, e) : (s: number, e: number) => chars.slice(s, e).join('');
     const pieces: number[] = [];
     for (let start = 0; start < chars.length;) {
-      let end = chars.length;
+      let end = Math.min(chars.length, start + longest);
       let id: number | undefined;
       for (; end > start; end--) {
-        id = vocab.get((start ? '##' : '') + chars.slice(start, end).join(''));
+        id = vocab.get(start ? '##' + piece(start, end) : piece(start, end));
         if (id !== undefined) break;
       }
       if (end === start) {
@@ -66,7 +72,7 @@ export function wordPiece(vocab: Map<string, number>, unk: number, text: string)
       pieces.push(id!);
       start = end;
     }
-    ids.push(...pieces);
+    for (const id of pieces) ids.push(id);
   }
   return ids;
 }

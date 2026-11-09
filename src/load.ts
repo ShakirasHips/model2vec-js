@@ -12,8 +12,8 @@ export function setFileReader(reader: FileReader): void {
   readFile = reader;
 }
 
-/** The bundled model: potion-base-8M's first 128 dimensions, packed at 4 bits. */
-export const DEFAULT_MODEL = new URL('../models/potion-base-8M-128d.bin', import.meta.url);
+/** The bundled model: potion-base-8M, all 256 dimensions packed at 2 bits. */
+export const DEFAULT_MODEL = new URL('../models/potion-base-8M.bin', import.meta.url);
 
 export async function loadBytes(src: Source): Promise<Uint8Array> {
   if (src instanceof ArrayBuffer) return new Uint8Array(src);

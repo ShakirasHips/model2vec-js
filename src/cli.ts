@@ -8,10 +8,10 @@ const HELP = `mini-semantic-search: semantic search with Model2Vec static embedd
       The documents closest in meaning to the query. docs.json is an array of objects.
   mini-semantic-search embed "<text>" [--model m.bin]
       The text's vector as JSON.
-  mini-semantic-search pack <model folder> <out.bin> [--bits 4|8|32] [--group 64] [--dims N]
-      Packs a Model2Vec model from Hugging Face (model.safetensors + tokenizer.json).
+  mini-semantic-search pack <model folder> <out.bin> [--bits 2|4|8|32] [--dims N] [--group 64]
+      Packs a Model2Vec model from Hugging Face (model.safetensors + tokenizer.json). --group is for 8 bits.
 
---model defaults to the bundled potion-base-8M (128 dimensions at 4 bits).`;
+--model defaults to the bundled potion-base-8M (256 dimensions at 2 bits).`;
 
 const argv = process.argv.slice(2);
 const flags = new Map<string, string>();
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(Array.from((await model()).embed(rest[0]), (x) => Number(x.toFixed(6)))));
   } else if (cmd === 'pack' && rest.length === 2) {
     const bits = num('bits', 4);
-    if (bits !== 4 && bits !== 8 && bits !== 32) throw new Error('--bits must be 4, 8 or 32');
+    if (bits !== 2 && bits !== 4 && bits !== 8 && bits !== 32) throw new Error('--bits must be 2, 4, 8 or 32');
     const bytes = await packModel(rest[0], { bits, group: num('group', 64), dims: flags.has('dims') ? num('dims', 0) : undefined });
     await writeFile(rest[1], bytes);
     const m = StaticModel.fromBytes(bytes);

@@ -3,7 +3,7 @@
 Semantic search with [MiniSearch](https://github.com/lucaong/minisearch)'s API. Documents are matched by meaning
 rather than shared words: "stop sending me newsletters" finds "How do I unsubscribe from your emails?", and "the mug
 came smashed" finds "My item arrived damaged or broken". It runs in browsers and Node with no dependencies, no
-server and no API calls, and the package is 2.2 MB with its model (1.8 MB gzipped).
+server and no API calls, and the package is 2.2 MB with its model (2.0 MB gzipped).
 
 ```ts
 import MiniSemanticSearch from 'mini-semantic-search';
@@ -21,15 +21,15 @@ search.addAll([
 
 search.search('the mug came smashed');
 // => [
-//   { id: 2, score: 0.39, title: 'Damaged items' },
-//   { id: 3, score: 0.15, title: 'Shipping times' },
-//   { id: 1, score: 0.08, title: 'Returns' },
+//   { id: 2, score: 0.29, title: 'Damaged items' },
+//   { id: 3, score: 0.16, title: 'Shipping times' },
+//   { id: 1, score: 0.02, title: 'Returns' },
 // ]
 ```
 
 The embeddings come from [Model2Vec](https://github.com/MinishLab/model2vec), a static embedding model. It keeps one
 vector per token, and a text's vector is the average of its tokens' vectors. There is no neural network to run, so
-embedding a document takes about 0.1 ms on a CPU.
+embedding a paragraph takes about 15 µs on a CPU.
 
 ## Install
 
@@ -100,9 +100,11 @@ depends on your documents' wording. Try your own off-topic questions and put it 
 
 **How it differs from MiniSearch.** Results have no `terms`, `queryTerms` or `match`, because nothing is matched
 word for word. There's no `prefix`, `fuzzy`, `combineWith`, `autoSuggest` or query syntax, and no
-`toJSON`/`loadJSON`: indexing costs about 0.1 ms per document, so you can just index again on load.
+`toJSON`/`loadJSON`: indexing costs about 0.05 ms per document, so you can just index again on load.
 
-Indexing takes 0.05–0.2 ms per document. A search over 10,000 documents takes about 8 ms.
+Indexing takes about 0.05 ms per document with three fields. A search over 10,000 documents takes about 4 ms, or
+about 13 ms when its `fields` or `boost` differ from the last search's. (Options used twice running get each
+document's vectors added up into one, so a search is one dot product per document.)
 
 ## Embeddings
 
@@ -110,7 +112,7 @@ Indexing takes 0.05–0.2 ms per document. A search over 10,000 documents takes 
 import { StaticModel, similarity } from 'mini-semantic-search';
 
 const model = await StaticModel.load();            // or StaticModel.load(urlOrPathOrBytes)
-const a = model.embed('how do I cancel my order');  // Float32Array(128), unit length
+const a = model.embed('how do I cancel my order');  // Float32Array(256), unit length
 const b = model.embed('stop my purchase before it ships');
 similarity(a, b);                                   // cosine similarity, 1 = same meaning
 model.embedMany(['refund', 'exchange']);           // several at once
@@ -122,14 +124,14 @@ model the vectors match `model2vec` to within 1e-6. The tests check the token id
 against fixtures made with `scripts/make-fixture.py`.
 
 Any Model2Vec model with a lower-casing BERT tokenizer and no token weights can be packed (most `minishlab/potion-*`
-models). A bigger model is more accurate. The full 256 dimensions of potion-base-8M at 4 bits are 4.2 MB:
+models). At 4 bits instead of 2, potion-base-8M is 4.1 MB and scores as the full-precision model does:
 
 ```sh
-npx mini-semantic-search pack ./potion-base-8M ./potion-base-8M.bin --bits 4
+npx mini-semantic-search pack ./potion-base-8M ./potion-base-8M-4bit.bin --bits 4
 ```
 
 ```ts
-const search = await MiniSemanticSearch.create({ fields: ['title', 'text'], model: '/potion-base-8M.bin' });
+const search = await MiniSemanticSearch.create({ fields: ['title', 'text'], model: '/potion-base-8M-4bit.bin' });
 ```
 
 ## Command line
@@ -137,7 +139,7 @@ const search = await MiniSemanticSearch.create({ fields: ['title', 'text'], mode
 ```sh
 npx mini-semantic-search search docs.json "how do I get a refund" --fields title,text [--k 5]
 npx mini-semantic-search embed "some text"                  # the vector as JSON
-npx mini-semantic-search pack <model folder> out.bin [--bits 4|8|32] [--group 64] [--dims N]
+npx mini-semantic-search pack <model folder> out.bin [--bits 2|4|8|32] [--dims N]
 ```
 
 ## How well it works
@@ -147,13 +149,31 @@ test questions), with the right entry ranked first or in the top 3:
 
 | Model | Size | `boost` | First | Top 3 |
 |---|---|---|---|---|
-| potion-base-8M, 256 dims at 4 bits | 4.2 MB | `{ q: 3 }` | 63.0% | 87.4% |
-| **potion-base-8M, 128 dims at 4 bits (bundled)** | **2.2 MB** | none | **59.3%** | **80.0%** |
-| **potion-base-8M, 128 dims at 4 bits (bundled)** | **2.2 MB** | `{ q: 3 }` | **60.7%** | **83.7%** |
+| **potion-base-8M at 2 bits (bundled)** | **2.2 MB** | none | **66.7%** | **83.7%** |
+| **potion-base-8M at 2 bits (bundled)** | **2.2 MB** | `{ q: 3 }` | **65.2%** | **85.9%** |
+| potion-base-8M at 4 bits | 4.1 MB | `{ q: 3 }` | 65.2% | 88.1% |
+| potion-base-8M, full precision | 30.5 MB | `{ q: 3 }` | 64.4% | 88.1% |
+| 0.1's model: 128 of the 256 dimensions at 4 bits | 2.2 MB | `{ q: 3 }` | 60.7% | 83.7% |
 
 The test questions were written with the entries in view, so expect real questions to do somewhat worse. The set
-is small: one question is 0.7%. The bundled model keeps potion-base-8M's first 128 dimensions (its PCA components
-with the most variance), and its vectors are within cosine 0.98 of the full-precision ones cut to 128.
+is small: one question is 0.7%. Two public benchmarks are bigger. In [Banking77](https://huggingface.co/datasets/mteb/banking77),
+3,080 customer questions each count as right when the closest of 10,003 other questions has the same intent (of 77).
+In [SciFact](https://huggingface.co/datasets/mteb/scifact), 300 claims look for the abstracts about them among 5,183
+(nDCG@10). `scripts/eval.mjs` runs both:
+
+| Model | Size | Banking77 | SciFact |
+|---|---|---|---|
+| **potion-base-8M at 2 bits (bundled)** | **2.2 MB** | **88.3%** | **50.1** |
+| potion-base-8M at 4 bits | 4.1 MB | 88.3% | 50.4 |
+| potion-base-8M, full precision | 30.5 MB | 88.5% | 50.6 |
+| 0.1's model: 128 of the 256 dimensions at 4 bits | 2.2 MB | 87.3% | 45.9 |
+
+**How the model is packed.** Each value is one of four levels fitted to the values (Lloyd-Max), times a scale for
+its dimension and one for its token. The scale per dimension matters because Model2Vec's dimensions are PCA
+components whose spread falls about fivefold from the first to the last. At 2 bits a single vector is noisy (cosine
+about 0.95 to the full-precision one), but the noise is spread across 256 dimensions and mostly cancels out when
+vectors are compared, so it loses less than keeping half the dimensions at 4 bits. The model stays packed in memory,
+so it takes about 3 MB of it rather than 30 MB, and loads in about 6 ms.
 
 **What it can't do:**
 - Averaging tokens loses word order, so "can I add a shopper" and "can a shopper add me" look alike.
@@ -169,10 +189,11 @@ npm install
 npm test                       # builds, then runs the tests (Node 21+)
 sh scripts/smoke.sh            # packs the package, installs it in an empty project and uses it from there
 python scripts/make-fixture.py <potion-base-8M folder>   # rebuilds the reference fixture (needs model2vec)
+node scripts/eval.mjs <data folder> <model.bin> ...       # Banking77 and SciFact (see the script for the data)
 ```
 
 The bundled model is rebuilt with
-`node dist/cli.js pack <potion-base-8M folder> models/potion-base-8M-128d.bin --bits 4 --dims 128 --group 128`.
+`node dist/cli.js pack <potion-base-8M folder> models/potion-base-8M.bin --bits 2`.
 
 CI (`.github/workflows/ci.yml`) builds every push and pull request on Node 18, 20, 22 and 24, runs the tests (22
 and 24) and the install check (all four).
@@ -185,8 +206,8 @@ repository `ShakirasHips/model2vec-js`, workflow `release.yml`, environment `npm
 ## Credits and licence
 
 The code is MIT-licensed (`LICENSE`). The bundled model is
-[potion-base-8M](https://huggingface.co/minishlab/potion-base-8M) by MinishLab, MIT, repacked at 128 dimensions and
-4 bits (see `models/README.md`). The API follows [MiniSearch](https://github.com/lucaong/minisearch) by Luca Ongaro.
+[potion-base-8M](https://huggingface.co/minishlab/potion-base-8M) by MinishLab, MIT, repacked at 2 bits (see
+`models/README.md`). The API follows [MiniSearch](https://github.com/lucaong/minisearch) by Luca Ongaro.
 
 This package reimplements Model2Vec's inference and BERT's tokenizer in TypeScript; it contains no code from
 Model2Vec, BERT or MiniSearch.
