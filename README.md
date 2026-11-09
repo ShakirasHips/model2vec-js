@@ -44,7 +44,7 @@ npm install mini-semantic-search
 
   ```html
   <script type="module">
-    import MiniSemanticSearch from 'https://cdn.jsdelivr.net/npm/mini-semantic-search@0.1.0/dist/index.js';
+    import MiniSemanticSearch from 'https://cdn.jsdelivr.net/npm/mini-semantic-search@0.2.0/dist/index.js';
     const search = await MiniSemanticSearch.create({ fields: ['title', 'text'] });
   </script>
   ```
