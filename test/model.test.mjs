@@ -107,3 +107,10 @@ test('the browser build does not import Node modules', () => {
     for (const [, dep] of src.matchAll(/from '\.\/([\w-]+)\.js'/g)) assert.notEqual(dep, 'node', `${f} imports node.js`);
   }
 });
+
+test('embedIds makes of token ids what embed makes of their text', () => {
+  const text = 'How do I return an item? It arrived damaged.';
+  const ids = model.tokenize(text);
+  assert.deepEqual(model.embedIds(ids), model.embed(text));
+  assert.deepEqual(model.embedIds(ids, 0, 7), model.embed('How do I return an item?'));
+});

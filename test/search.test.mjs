@@ -136,3 +136,65 @@ test('create loads the bundled model; the constructor needs one', async () => {
   assert.throws(() => new MiniSemanticSearch({ fields: ['q'] }), /needs a loaded model/);
   assert.throws(() => new MiniSemanticSearch({ model, fields: [] }), /"fields"/);
 });
+
+test('keywordWeight: shared words count, from not at all to alone', () => {
+  const s = new MiniSemanticSearch({ model, fields: ['text'] });
+  s.addAll([
+    { id: 'name', text: 'Form XK42 is for warehouse staff.' },
+    { id: 'meaning', text: 'Tropical beach holidays by the warm sea.' },
+    { id: 'other', text: 'How to file your tax return.' },
+  ]);
+  const q = 'seaside vacation xk42';
+  assert.equal(s.search(q, { keywordWeight: 0 })[0].id, 'meaning');
+  assert.equal(s.search(q)[0].id, 'name');
+  const words = s.search(q, { keywordWeight: 1 });
+  assert.equal(words[0].id, 'name');
+  assert.ok(words[0].score > 0 && words[0].score <= 1);
+  assert.equal(words[2].score, 0); // no word of the query is in it
+  // a query with no words in it is scored on meaning alone
+  assert.equal(s.search('?!').length, 3);
+  // keyword scores keep to the fields searched
+  const two = new MiniSemanticSearch({ model, fields: ['title', 'text'] });
+  two.addAll([{ id: 1, title: 'Zanzibar', text: 'An island.' }, { id: 2, title: 'An island', text: 'Zanzibar.' }]);
+  assert.equal(two.search('zanzibar', { fields: ['title'], keywordWeight: 1 })[0].id, 1);
+  assert.equal(two.search('zanzibar', { fields: ['title'], keywordWeight: 1 })[1].score, 0);
+  assert.equal(two.search('zanzibar', { fields: ['text'], keywordWeight: 1 })[0].id, 2);
+});
+
+test('long texts are split into passages, and the closest counts', () => {
+  const filler = Array.from({ length: 12 }, (_, i) => `The committee met on day ${i} to review the quarterly budget figures.`).join(' ');
+  const cats = 'Our cat likes to sleep on the warm windowsill. She naps there in the sunshine every afternoon. The kitten curls up beside her and dozes too.';
+  const long = { id: 'long', text: `${filler} ${cats} ${filler}` };
+  const other = { id: 'other', text: `${filler} ${filler}` };
+  const scores = (options) => {
+    const s = new MiniSemanticSearch({ model, fields: ['text'], passageLength: 40, searchOptions: { keywordWeight: 0 }, ...options });
+    s.addAll([long, other]);
+    return new Map(s.search('a kitten napping in the sun').map((r) => [r.id, r.score]));
+  };
+  const split = scores({}), whole = scores({ passageLength: 0 });
+  assert.ok(split.get('long') > whole.get('long') + 0.2, `${split.get('long')} ${whole.get('long')}`);
+  assert.ok(split.get('long') > split.get('other') + 0.2);
+  // a text shorter than a passage scores the same either way
+  const short = (options) => {
+    const s = new MiniSemanticSearch({ model, fields: ['q'], ...options });
+    s.addAll(docs);
+    return s.search('do you take paypal').map((r) => r.score);
+  };
+  assert.deepEqual(short({}), short({ passageLength: 0 }));
+});
+
+test('scores stay right when most documents have been removed', () => {
+  const many = Array.from({ length: 120 }, (_, i) => ({ ...docs[i % docs.length], id: `${i}` }));
+  const s = make();
+  s.addAll(many);
+  s.search('where is my refund');
+  s.search('where is my refund');
+  s.discardAll(many.slice(0, 100).map((d) => d.id)); // enough for the keyword index to renumber what is left
+  s.addAll(many.slice(0, 5));
+  const fresh = make();
+  fresh.addAll([...many.slice(100), ...many.slice(0, 5)]);
+  const want = new Map(fresh.search('where is my refund').map((r) => [r.id, r.score]));
+  const got = s.search('where is my refund');
+  assert.equal(got.length, 25);
+  for (const r of got) assert.ok(Math.abs(r.score - want.get(r.id)) < 1e-6, r.id);
+});

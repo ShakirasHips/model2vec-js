@@ -81,15 +81,19 @@ export class StaticModel {
 
   /** The text's vector: unit length, or all zeros if it has no known tokens. */
   embed(text: string): Float32Array {
-    const { dims, packed } = this;
-    const v = new Float32Array(dims);
     const chars = this.maxTokens * this.medianTokenLength;
     if (text.length > chars) text = Array.from(text).slice(0, chars).join('');
     const ids = this.tokenize(text);
-    const end = Math.min(ids.length, this.maxTokens);
+    return this.embedIds(ids, 0, Math.min(ids.length, this.maxTokens));
+  }
+
+  /** The vector of the token ids from `start` up to `end` (as `tokenize` gives them): what `embed` makes of a text. */
+  embedIds(ids: ArrayLike<number>, start = 0, end = ids.length): Float32Array {
+    const { dims, packed } = this;
+    const v = new Float32Array(dims);
     if (packed) {
       const { codes, rowScales, lookup, perByte, rowBytes, colScales } = packed;
-      for (let t = 0; t < end; t++) {
+      for (let t = start; t < end; t++) {
         const id = ids[t];
         if (id === this.unk) continue;
         const r = rowScales[id];
@@ -112,7 +116,7 @@ export class StaticModel {
       for (let d = 0; d < dims; d++) v[d] *= colScales[d];
     } else {
       const table = this.table!;
-      for (let t = 0; t < end; t++) {
+      for (let t = start; t < end; t++) {
         const id = ids[t];
         if (id === this.unk) continue;
         for (let d = 0, o = id * dims; d < dims; d++) v[d] += table[o + d];
